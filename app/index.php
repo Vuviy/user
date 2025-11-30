@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+use App\FakeBookRepository;
 use App\Repository\SessionUserRepository;
 use App\Service\AuthService;
 use App\User;
@@ -13,10 +14,10 @@ require __DIR__ . '/functions/functions.php';
 require __DIR__ . '/vendor/autoload.php';
 
 $user = new User(
-    new Id('550e8400-e29b-41d4-a716-446655440003'),
-    new Email('test2@example.com'),
+    new Id('550e8400-e29b-41d4-a716-446655440007'),
+    new Email('test5@example.com'),
     Password::fromPlain('password'),
-    new Role('user')
+    new Role('moderator')
 );
 
 $repo = new SessionUserRepository();
@@ -24,18 +25,25 @@ $repo = new SessionUserRepository();
 
 $authServise = new AuthService($repo);
 
-$user = $authServise->register('test3@example.com', 'password222');
-$authUser = $authServise->login('test3@example.com', 'password222');
+//$user = $authServise->register('test9@example.com', 'password222', 'moderator');
+$authUser = $authServise->login('test9@example.com', 'password222');
 //$authServise->logout();
 $authUserFromMethod = $authServise->getCurrentUser();
 //$repo->save($user);
 
+$authUserFromMethod->setRole(new Role('admin'));
 
+
+//dd($authUserFromMethod);
 //$repo->delete( new Id('550e8400-e29b-41d4-a716-446655440000'));
 // $repo->delete( new Id('550e8400-e29b-41d4-a716-446655440003'));
 //$user = $repo->getById(new Id('550e8400-e29b-41d4-a716-446655440003'));
 
-dd($authUserFromMethod);
+$fakerepo = new FakeBookRepository();
+
+$res = $fakerepo->fakeDeleteBook();
+
+dd($res);
 
 //$user->setId(new Id('new_id'));
 //$user->setEmail(new Email('new_email@gmail.com'));

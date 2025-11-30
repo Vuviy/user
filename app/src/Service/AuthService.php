@@ -46,7 +46,7 @@ final class AuthService
         $email = new Email($emailString);
         $user = $this->repo->getByEmail($email);
         if ($user === null) {
-            throw new InvalidArgumentException('User not found.');
+            throw new InvalidArgumentException('Invalid credentials.');
         }
 
         if (!$user->getPassword()->verify($plainPassword)) {
