@@ -1,6 +1,7 @@
 <?php
 
 namespace App;
+
 use App\ValueObject\Email;
 use App\ValueObject\Id;
 use App\ValueObject\Password;
@@ -13,7 +14,10 @@ class User
     private Id $id;
     private Email $email;
     private Password $password;
-    private Role $role;
+
+    /** @var Role[] */
+    private array $roles = [];
+
     private DateTimeImmutable $created_at;
 
 
@@ -22,21 +26,32 @@ class User
      *
      * @param Id $id
      * @param Email $email
-     * @param Password $password  // making by fromPlain() or fromHash)
-     * @param Role $role
+     * @param Password $password // making by fromPlain() or fromHash)
+     * @param array $roles
      * @param DateTimeImmutable|null $createdAt
      */
     public function __construct(
-        Id $id,
-        Email $email,
-        Password $password,
-        Role $role,
+        Id                 $id,
+        Email              $email,
+        Password           $password,
+        array              $roles,
         ?DateTimeImmutable $createdAt = null
-    ){
+    )
+    {
         $this->id = $id;
         $this->email = $email;
         $this->password = $password;
-        $this->role = $role;
+
+        foreach ($roles as $role) {
+            if (!$role instanceof Role) {
+                throw new InvalidArgumentException(
+                    "Each item in roles must be instance of Role, got: " . (is_object($role) ? get_class($role) : gettype($role))
+                );
+            }
+        $this->roles[] = $role;
+
+        }
+
         $this->created_at = $createdAt ?? new DateTimeImmutable();
     }
 
@@ -73,12 +88,39 @@ class User
 
     public function setRole(Role $role)
     {
-        $this->role = $role;
+        $this->roles[] = $role;
     }
 
-    public function getRole(): Role
+    public function addRole(Role $role): void
     {
-        return $this->role;
+        foreach ($this->roles as $r) {
+            if ($r->is((string)$role)) {
+                return;
+            }
+        }
+
+        $this->roles[] = $role;
+    }
+
+    /**
+     * return array of objects Role
+     *
+     * @return Role[]
+     */
+    public function getRoles(): array
+    {
+        return $this->roles;
+    }
+
+
+    /**
+     * return array of role's names (string[])
+     *
+     * @return string[]
+     */
+    public function getRoleNames(): array
+    {
+        return array_map(fn(Role $r) => (string)$r, $this->roles);
     }
 
     public function getCreatedAt(): DateTimeImmutable
@@ -93,16 +135,17 @@ class User
      * @return void
      */
     public function updateProfile(
-        ?Email $email = null,
-        ?Role $role = null,
+        ?Email    $email = null,
+        ?Role     $role = null,
         ?Password $password = null
-    ): void {
+    ): void
+    {
         if ($email !== null) {
             $this->email = $email;
         }
 
         if ($role !== null) {
-            $this->role = $role;
+            $this->addRole($role);
         }
 
         if ($password !== null) {
@@ -118,8 +161,65 @@ class User
      */
     public function hasRole(string $role): bool
     {
-        return $this->role->is($role);
+        foreach ($this->roles as $r) {
+            if ($r->is($role)) {
+                return true;
+            }
+        }
+        return false;
     }
+
+    public function hasPermission(string $permissionKey): bool
+    {
+        foreach ($this->roles as $role) {
+            foreach ($role->allPermissions() as $perm) {
+                if ($perm->key() === $permissionKey) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * return permissions
+     */
+    public function getPermissions(): array
+    {
+        $permissions = [];
+
+        foreach ($this->getExpandedRoles() as $role) {
+            foreach ($role->getPermissions() as $p) {
+                $permissions[$p->key()] = $p;
+            }
+        }
+
+        return array_values($permissions);
+    }
+
+
+    /**
+     * get all roles
+     */
+    public function getExpandedRoles(): array
+    {
+        $result = [];
+
+        foreach ($this->roles as $role) {
+            $result = array_merge($result, $role->expand());
+        }
+
+        $unique = [];
+        foreach ($result as $role) {
+            $unique[(string)$role] = $role;
+        }
+
+        return array_values($unique);
+    }
+
+
+
 
     public function __get(string $name)
     {
@@ -140,7 +240,7 @@ class User
             throw new InvalidArgumentException("Property '{$name}' does not exist on User");
         }
 
-        if($name === 'password') {
+        if ($name === 'password') {
             throw new InvalidArgumentException("You cannot set password for user in this method");
         }
 
@@ -161,11 +261,11 @@ class User
     public function __serialize(): array
     {
         return [
-          'id' => (string)$this->id,
-          'email' => (string)$this->email,
-          'password' => $this->password->getHash(),
-          'role' => (string)$this->role,
-          'created_at' => $this->created_at->format('Y-m-d H:i:s'),
+            'id' => (string)$this->id,
+            'email' => (string)$this->email,
+            'password' => $this->password->getHash(),
+            'roles' => array_map(fn(Role $r) => (string)$r, $this->roles),
+            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
         ];
     }
 
@@ -179,18 +279,21 @@ class User
         $this->id = new Id($data['id']);
         $this->email = new Email($data['email']);
         $this->password = Password::fromHash($data['password']);
-        $this->role = new Role($data['role']);
+        $this->roles = array_map(
+            fn(string $roleName) => RoleFactory::create($roleName),
+            $data['roles']
+        );
         $this->created_at = new DateTimeImmutable($data['created_at']);
     }
 
     public function toArray(): array
     {
         return [
-          'id' => (string)$this->id,
-          'email' => (string)$this->email,
-          'password' => $this->password->getHash(),
-          'role' => (string)$this->role,
-          'created_at' => $this->created_at->format('Y-m-d H:i:s'),
+            'id' => (string)$this->id,
+            'email' => (string)$this->email,
+            'password' => $this->password->getHash(),
+            'roles' => array_map(fn(Role $r) => (string)$r, $this->roles),
+            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
         ];
     }
 }

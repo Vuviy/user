@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Repository\UserRepositoryInterface;
+use App\RoleFactory;
 use App\User;
 use App\ValueObject\Email;
 use App\ValueObject\Id;
@@ -22,7 +23,7 @@ final class AuthService
         }
     }
 
-    public function register(string $emailString, string $plainPassword, string $role = Role::USER): User
+    public function register(string $emailString, string $plainPassword, array $roles = []): User
     {
         $email = new Email($emailString);
 
@@ -33,9 +34,24 @@ final class AuthService
         $id = new Id($this->generateFakeUuid());
 
         $password = Password::fromPlain($plainPassword);
-        $role = new Role($role);
 
-        $user = new User($id, $email, $password, $role);
+        $validateRoles = [];
+        foreach ($roles as $r) {
+            if (!$r instanceof Role) {
+                throw new InvalidArgumentException(
+                    "Each item in roles must be instance of Role, got: " . (is_object($r) ? get_class($r) : gettype($r))
+                );
+            }
+            $validateRoles[] = $r;
+
+        }
+
+        if(0 === count($validateRoles)){
+            $userRole = RoleFactory::create('user');
+            $validateRoles[] = $userRole;
+        }
+
+        $user = new User($id, $email, $password, $validateRoles);
         $this->repo->save($user);
 
         return $user;
